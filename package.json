@@ -1,8 +1,8 @@
 {
-  "name": "munopix-custom-api",
+  "name": "pearlpix-api",
   "version": "1.0.0",
   "description": "Custom API for PearlFlix powered by Supabase and Vercel",
-  "main": "index.js",
+  "main": "api/browse_api.js",
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0"
   },
