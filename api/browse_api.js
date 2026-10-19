@@ -45,26 +45,36 @@ module.exports = async (req, res) => {
 
     // 2. Handle main library listing, search, and pagination
     const p = parseInt(page) || 1;
-    const pp = parseInt(perPage) || 20;
+    // Cap perPage flexibly to prevent accidental memory spikes or serverless timeouts
+    const pp = Math.min(parseInt(perPage) || 20, 250); 
     const offset = (p - 1) * pp;
 
     let query = supabase
       .from('media_library')
       .select('*, episodes(*)', { count: 'exact' });
 
+    // Handle Search Queries (Title & Description)
     if (q && q.trim() !== '') {
-      query = query.or(`title.ilike.%${q.trim()}%,description.ilike.%${q.trim()}%`);
+      const searchTerm = q.trim();
+      query = query.or(`title.ilike.%${searchTerm}%,description.ilike.%${searchTerm}%`);
     }
-    if (type && type.trim() !== '') {
+
+    // Handle Content Type (Movie vs Series)
+    if (type && type.trim() !== '' && type.toLowerCase() !== 'all') {
       query = query.eq('content_type', type.trim());
     }
-    if (genre && genre.trim() !== '') {
+
+    // Handle Genre Filter (Ignores default "All Genres" case)
+    if (genre && genre.trim() !== '' && genre.toLowerCase() !== 'all genres') {
       query = query.contains('genres', [genre.trim()]);
     }
-    if (vj && vj.trim() !== '') {
+
+    // Handle VJ Filter (Ignores default "All VJs" case)
+    if (vj && vj.trim() !== '' && vj.toLowerCase() !== 'all vjs') {
       query = query.contains('vjs', [vj.trim()]);
     }
 
+    // Apply Range Pagination & Order
     query = query
       .range(offset, offset + pp - 1)
       .order('created_at', { ascending: false });
@@ -73,7 +83,7 @@ module.exports = async (req, res) => {
 
     if (error) throw error;
 
-    const items = data.map(item => ({
+    const items = (data || []).map(item => ({
       id: item.id,
       title: item.title,
       contentType: item.content_type,
