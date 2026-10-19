@@ -15,7 +15,7 @@ module.exports = async (req, res) => {
     return res.status(200).end();
   }
 
-  const { q, type, genre, vj, tag, page = 1, perPage = 20, filters } = req.query;
+  const { q, type, genre, vj, tag, page = 1, perPage = 20, filters, all } = req.query;
 
   try {
     // 1. Handle filter options request (?filters=1)
@@ -65,9 +65,12 @@ module.exports = async (req, res) => {
       query = query.contains('vjs', [vj.trim()]);
     }
 
-    query = query
-      .range(offset, offset + pp - 1)
-      .order('created_at', { ascending: false });
+    // ONLY APPLY PAGINATION IF 'all=true' IS NOT PASSED
+    if (all !== 'true') {
+      query = query.range(offset, offset + pp - 1);
+    }
+
+    query = query.order('created_at', { ascending: false });
 
     const { data, count, error } = await query;
 
@@ -93,10 +96,10 @@ module.exports = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      page: p,
-      perPage: pp,
+      page: all === 'true' ? 1 : p,
+      perPage: all === 'true' ? items.length : pp,
       total: count || 0,
-      totalPages: Math.ceil((count || 0) / pp),
+      totalPages: all === 'true' ? 1 : Math.ceil((count || 0) / pp),
       items
     });
 
