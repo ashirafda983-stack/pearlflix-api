@@ -65,8 +65,10 @@ module.exports = async (req, res) => {
       query = query.contains('vjs', [vj.trim()]);
     }
 
-    // ONLY APPLY PAGINATION IF 'all=true' IS NOT PASSED
-    if (all !== 'true') {
+    // SAFE UNPAGINATED RANGE FOR ALL=TRUE (Bypasses limits without timing out)
+    if (all === 'true') {
+      query = query.range(0, 1999);
+    } else {
       query = query.range(offset, offset + pp - 1);
     }
 
