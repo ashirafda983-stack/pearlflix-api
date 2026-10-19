@@ -43,6 +43,11 @@ module.exports = async (req, res) => {
       });
     }
 
+    // 2. Handle main library listing, search, and pagination
+    const p = parseInt(page) || 1;
+    const pp = parseInt(perPage) || 20;
+    const offset = (p - 1) * pp;
+
     let query = supabase
       .from('media_library')
       .select('*, episodes(*)', { count: 'exact' });
@@ -60,20 +65,18 @@ module.exports = async (req, res) => {
       query = query.contains('vjs', [vj.trim()]);
     }
 
-    // Fast Single-Query Batch (Pulls up to 2,000 items instantly without Vercel timeouts)
-    if (all === 'true') {
-      query = query.range(0, 1999).order('created_at', { ascending: false });
-    } else {
-      const p = parseInt(page) || 1;
-      const pp = parseInt(perPage) || 20;
-      const offset = (p - 1) * pp;
-      query = query.range(offset, offset + pp - 1).order('created_at', { ascending: false });
+    // ONLY APPLY PAGINATION IF 'all=true' IS NOT PASSED
+    if (all !== 'true') {
+      query = query.range(offset, offset + pp - 1);
     }
 
+    query = query.order('created_at', { ascending: false });
+
     const { data, count, error } = await query;
+
     if (error) throw error;
 
-    const items = (data || []).map(item => ({
+    const items = data.map(item => ({
       id: item.id,
       title: item.title,
       contentType: item.content_type,
@@ -93,10 +96,10 @@ module.exports = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      page: all === 'true' ? 1 : (parseInt(page) || 1),
-      perPage: all === 'true' ? items.length : (parseInt(perPage) || 20),
-      total: count || items.length,
-      totalPages: all === 'true' ? 1 : Math.ceil((count || items.length) / (parseInt(perPage) || 20)),
+      page: all === 'true' ? 1 : p,
+      perPage: all === 'true' ? items.length : pp,
+      total: count || 0,
+      totalPages: all === 'true' ? 1 : Math.ceil((count || 0) / pp),
       items
     });
 
