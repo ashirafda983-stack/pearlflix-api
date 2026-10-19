@@ -43,87 +43,37 @@ module.exports = async (req, res) => {
       });
     }
 
-    let data = [];
-    let count = 0;
+    let query = supabase
+      .from('media_library')
+      .select('*, episodes(*)', { count: 'exact' });
 
-    // 2. Handle full catalog fetch with automatic chunking (bypasses Supabase 1,000-row limit)
+    if (q && q.trim() !== '') {
+      query = query.or(`title.ilike.%${q.trim()}%,description.ilike.%${q.trim()}%`);
+    }
+    if (type && type.trim() !== '') {
+      query = query.eq('content_type', type.trim());
+    }
+    if (genre && genre.trim() !== '') {
+      query = query.contains('genres', [genre.trim()]);
+    }
+    if (vj && vj.trim() !== '') {
+      query = query.contains('vjs', [vj.trim()]);
+    }
+
+    // Fast Single-Query Batch (Pulls up to 2,000 items instantly without Vercel timeouts)
     if (all === 'true') {
-      let allItems = [];
-      let pageIndex = 0;
-      let pageSize = 1000;
-      let fetching = true;
-
-      while (fetching) {
-        let chunkQuery = supabase
-          .from('media_library')
-          .select('*, episodes(*)', { count: 'exact' })
-          .range(pageIndex * pageSize, (pageIndex + 1) * pageSize - 1)
-          .order('created_at', { ascending: false });
-
-        if (q && q.trim() !== '') {
-          chunkQuery = chunkQuery.or(`title.ilike.%${q.trim()}%,description.ilike.%${q.trim()}%`);
-        }
-        if (type && type.trim() !== '') {
-          chunkQuery = chunkQuery.eq('content_type', type.trim());
-        }
-        if (genre && genre.trim() !== '') {
-          chunkQuery = chunkQuery.contains('genres', [genre.trim()]);
-        }
-        if (vj && vj.trim() !== '') {
-          chunkQuery = chunkQuery.contains('vjs', [vj.trim()]);
-        }
-
-        const { data: chunk, count: totalCount, error: chunkErr } = await chunkQuery;
-        if (chunkErr) throw chunkErr;
-        
-        count = totalCount || count;
-
-        if (chunk && chunk.length > 0) {
-          allItems = allItems.concat(chunk);
-          if (chunk.length < pageSize) {
-            fetching = false;
-          } else {
-            pageIndex++;
-          }
-        } else {
-          fetching = false;
-        }
-      }
-      data = allItems;
+      query = query.range(0, 1999).order('created_at', { ascending: false });
     } else {
-      // Standard Paginated Request
       const p = parseInt(page) || 1;
       const pp = parseInt(perPage) || 20;
       const offset = (p - 1) * pp;
-
-      let query = supabase
-        .from('media_library')
-        .select('*, episodes(*)', { count: 'exact' });
-
-      if (q && q.trim() !== '') {
-        query = query.or(`title.ilike.%${q.trim()}%,description.ilike.%${q.trim()}%`);
-      }
-      if (type && type.trim() !== '') {
-        query = query.eq('content_type', type.trim());
-      }
-      if (genre && genre.trim() !== '') {
-        query = query.contains('genres', [genre.trim()]);
-      }
-      if (vj && vj.trim() !== '') {
-        query = query.contains('vjs', [vj.trim()]);
-      }
-
-      query = query
-        .range(offset, offset + pp - 1)
-        .order('created_at', { ascending: false });
-
-      const resQuery = await query;
-      if (resQuery.error) throw resQuery.error;
-      data = resQuery.data || [];
-      count = resQuery.count || 0;
+      query = query.range(offset, offset + pp - 1).order('created_at', { ascending: false });
     }
 
-    const items = data.map(item => ({
+    const { data, count, error } = await query;
+    if (error) throw error;
+
+    const items = (data || []).map(item => ({
       id: item.id,
       title: item.title,
       contentType: item.content_type,
